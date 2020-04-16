@@ -46,7 +46,7 @@ exports.addRequest = functions.https.onCall((data, context) => {
 })
 
 // upvote callable function
-exports.upvote = functions.https.onCall(( data, context) => {
+exports.upvote = functions.https.onCall( async ( data, context) => {
     //check auth
     if(!context.auth){
         throw new functions.https.HttpsError(
@@ -59,7 +59,7 @@ exports.upvote = functions.https.onCall(( data, context) => {
     const user = admin.firestore().collection('users').doc(context.auth.uid);
     const request = admin.firestore().collection('requests').doc(data.id);
 
-    return user.get().then(doc => {
+    const doc = await user.get();
         //check user hasn't already upvoted the request
         if(doc.data().upvotedOn.includes(data.id)){
             throw new functions.https.HttpsError(
@@ -68,35 +68,35 @@ exports.upvote = functions.https.onCall(( data, context) => {
             )
         }
         //update user array
-        return user.update({
-            upvotedOn: [...doc.data().upvotedOn, data.id]
+        await user.update({
+                upvotedOn: [...doc.data().upvotedOn, data.id]
+            });
+     
+        //update votes on the request
+        return request.update({
+            //把当前这个request里的upvotes字段的值增1；
+            upvotes: admin.firestore.FieldValue.increment(1)
         })
-        .then(() => {
-            //update votes on the request
-            return request.update({
-                //把当前这个request里的upvotes字段的值增1；
-                upvotes: admin.firestore.FieldValue.increment(1)
-            })
-        })
+        
+    
+});
+
+// firestore trigger for tracking activity
+exports.logActivities = functions.firestore.document('/{collection}/{id}')
+    .onCreate((snap, context) => { //任何一个collection下的任何一个iddociment被创建的时候都执行这个回调
+        console.log(snap.data());
+        
+        const collection = context.params.collection; //获取数据路径参数
+        const id = context.params.id;
+
+        const activities = admin.firestore().collection('activities');
+
+        if(collection === 'requests') {
+            return activities.add({ text: 'a new tutorial request was added' })
+        }
+        if(collection === 'users') {
+            return activities.add({ text: 'a new user signed up' })
+        }
+        return null;
     })
-})
 
-
-
-
-// //http request 1
-// exports.randomNumber = functions.https.onRequest((request, response) => {
-//     const number = Math.round(Math.random() * 100);
-//     response.send(number.toString());
-// })
-
-// //http request 2
-// exports.toTheDojo = functions.https.onRequest((request, response) => {
-//     response.redirect('https://yambo-firestore-tut.web.app/')
-// });
-
-// //http callable function
-// exports.sayHello = functions.https.onCall((data, context) => {
-//     const name = data.name;
-//     return `hello , ${name}`
-// })
